@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(conda *)",
+      "Bash(pip install *)",
+      "Bash(PYTHONIOENCODING=utf-8 <YOUR_CONDA_PYTHON>/python.exe *)",
+      "Bash(git -C \"<YOUR_PROJECT_DIR>\" rev-parse --git-dir)"
+    ]
+  }
+}
