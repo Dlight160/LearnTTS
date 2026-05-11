@@ -2,10 +2,29 @@
   "permissions": {
     "allow": [
       "WebSearch",
+      "WebFetch",
       "Bash(conda *)",
       "Bash(pip install *)",
       "Bash(PYTHONIOENCODING=utf-8 <YOUR_CONDA_PYTHON>/python.exe *)",
-      "Bash(git -C \"<YOUR_PROJECT_DIR>\" rev-parse --git-dir)"
-    ]
+      "Bash(git *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(cat *)",
+      "Bash(echo *)",
+      "Bash(which *)",
+      "Bash(head *)",
+      "Bash(wc *)",
+      "Bash(cd *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" *)",
+      "Bash(cmd.exe *)",
+      "Bash(powershell.exe *)",
+      "Bash(rm *)",
+      "Bash(grep *)",
+      "mcp__ide__*"
+    ],
+    "defaultMode": "acceptEdits"
   }
 }
