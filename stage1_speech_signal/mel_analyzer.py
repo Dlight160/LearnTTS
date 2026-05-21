@@ -38,17 +38,22 @@ warnings.filterwarnings("ignore", category=UserWarning)
 def load_audio(filepath: str, target_sr: int | None = None) -> tuple[torch.Tensor, int]:
     """加载音频文件，返回 (waveform, sample_rate)。
 
+    使用 soundfile 而非 torchaudio，避免 torchcodec 依赖。
+
     Args:
         filepath: wav 文件路径
         target_sr: 目标采样率，None 则保持原采样率
     """
-    waveform, sr = torchaudio.load(filepath)
+    data, sr = sf.read(filepath)
+    # sf.read 返回 (T, C) 或 (T,)，统一转成 (1, T) 的 torch.Tensor
+    if data.ndim == 1:
+        waveform = torch.from_numpy(data).unsqueeze(0).float()
+    else:
+        waveform = torch.from_numpy(data.mean(axis=1)).unsqueeze(0).float()
+
     if target_sr is not None and target_sr != sr:
         waveform = F.resample(waveform, sr, target_sr)
         sr = target_sr
-    # 转为单声道
-    if waveform.shape[0] > 1:
-        waveform = waveform.mean(dim=0, keepdim=True)
     return waveform, sr
 
 

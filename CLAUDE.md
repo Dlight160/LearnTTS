@@ -8,17 +8,16 @@ LearnTTS — 系统性 TTS 学习项目,从语音信号基础到前沿扩散/LLM
 
 ## 运行环境
 
-- **Python**: 3.10 (conda 环境 `learntts`)
-- **conda 路径**: `C:/Users/L/miniconda3/envs/learntts/`
-- **CUDA**: 可用
-- **操作系统**: Windows 11 (Git Bash)
+- **Python**: 3.12 (conda 本地环境 `conda_env/`)
+- **Python 路径**: `<project_root>/conda_env/bin/python`
+- **CUDA**: 可用 (NVIDIA GeForce RTX 3090 ×8)
+- **操作系统**: Linux
 
 ### 运行 Python 脚本
 
-Windows 上 `conda run` 有 Unicode 编码问题,必须用以下方式运行:
-
 ```bash
-PYTHONIOENCODING=utf-8 C:/Users/L/miniconda3/envs/learntts/python.exe <script.py> [args]
+# 项目根目录执行，使用本地 conda 环境
+./conda_env/bin/python <script.py> [args]
 ```
 
 ## 项目结构
@@ -29,20 +28,26 @@ PYTHONIOENCODING=utf-8 C:/Users/L/miniconda3/envs/learntts/python.exe <script.py
 | `stage1_speech_signal/` | 阶段1: Mel 频谱分析器 |
 | `stageN_*/` | 后续阶段逐步添加 |
 
-## 阶段 1 命令参考
+## 命令参考
 
 ```bash
 # 运行 Mel 频谱分析器(默认生成扫频测试信号)
-PYTHONIOENCODING=utf-8 C:/Users/L/miniconda3/envs/learntts/python.exe stage1_speech_signal/mel_analyzer.py
+./conda_env/bin/python stage1_speech_signal/mel_analyzer.py
 
 # 指定音频文件
-PYTHONIOENCODING=utf-8 C:/Users/L/miniconda3/envs/learntts/python.exe stage1_speech_signal/mel_analyzer.py /path/to/speech.wav
+./conda_env/bin/python stage1_speech_signal/mel_analyzer.py /path/to/speech.wav
 
 # 参数扫描实验
-PYTHONIOENCODING=utf-8 C:/Users/L/miniconda3/envs/learntts/python.exe stage1_speech_signal/mel_analyzer.py --sweep
+./conda_env/bin/python stage1_speech_signal/mel_analyzer.py --sweep
 
 # 自定义参数
-PYTHONIOENCODING=utf-8 C:/Users/L/miniconda3/envs/learntts/python.exe stage1_speech_signal/mel_analyzer.py --n-fft 2048 --n-mels 128
+./conda_env/bin/python stage1_speech_signal/mel_analyzer.py --n-fft 2048 --n-mels 128
+
+# 相位 2: HiFi-GAN 训练 (快速验证)
+./conda_env/bin/python stage2_hifi_gan/train.py --fast
+
+# 相位 2: HiFi-GAN 训练 (完整)
+./conda_env/bin/python stage2_hifi_gan/train.py --data-root ./data/LJSpeech-1.1 --max-steps 500000
 ```
 
 ## 学习路线概览

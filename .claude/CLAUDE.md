@@ -1,5 +1,10 @@
 每次新对话开始时，如果项目根目录存在 HANDOFF.md，先读取它了解上次进度。
 
+运行 Python 使用项目根目录下的本地 conda 环境:
+```bash
+./conda_env/bin/python <script.py> [args]
+```
+
 当我问概念性或学习性问题问题（什么是X / 为什么Y / 举个例子 / X和Y有什么区别），主动维护一份QA_Log.md
 
 位置，当前project目录下
