@@ -53,8 +53,8 @@ class MelSpectrogram(nn.Module):
     def forward(self, wav: torch.Tensor) -> torch.Tensor:
         """wav: (B, T) → mel: (B, n_mels, T')"""
         mel = self.mel_spec(wav)
-        # 对数压缩: log(1 + mel) 避免 log(0)
-        mel = torch.log(1 + mel)
+        # dB 尺度: 20*log10(mel), clamp 防 log(0)
+        mel = 20 * torch.log10(torch.clamp(mel, min=1e-5))
         return mel
 
 
@@ -204,8 +204,10 @@ def train(rank, args, world_size=1):
     dataset = AudioDataset(args.data_root, sr=args.sr, segment_len=args.segment_len,
                            synthetic=args.fast)
     sampler = DistributedSampler(dataset) if is_ddp else None
+    nw = min(4, os.cpu_count() // (world_size if is_ddp else 1))
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=sampler is None,
-                        sampler=sampler, num_workers=0)
+                        sampler=sampler, num_workers=nw, pin_memory=True,
+                        persistent_workers=nw > 0)
 
     # --- 模型 ---
     if rank == 0:
@@ -230,6 +232,61 @@ def train(rank, args, world_size=1):
         lr=args.lr, betas=(0.8, 0.99),
     )
 
+    # --- 混合精度 (AMP) ---
+    scaler_g = torch.amp.GradScaler()
+    scaler_d = torch.amp.GradScaler()
+
+    # --- 检查点恢复 ---
+
+    def load_checkpoint(path: str) -> tuple[int, int, float]:
+        """从检查点恢复训练状态。
+
+        支持两种格式:
+          - 完整检查点 (含 generator/discriminator/optimizer/step 等)
+          - 旧格式 g_best.pt (仅 generator state_dict, warm start)
+        """
+        nonlocal generator, msd, mpd, optim_g, optim_d, scaler_g, scaler_d
+
+        # 解析便捷值
+        if path == "checkpoint_best":
+            path = str(output_dir / "checkpoint_best.pt")
+        elif path == "checkpoint_latest":
+            ckpt_files = sorted(output_dir.glob("checkpoint_*.pt"))
+            if not ckpt_files:
+                raise FileNotFoundError(f"未找到 checkpoint_*.pt 在 {output_dir}")
+            path = str(ckpt_files[-1])
+
+        ckpt = torch.load(path, map_location=device, weights_only=False)
+
+        if "generator" in ckpt:
+            # 完整检查点
+            unwrap(generator).load_state_dict(ckpt["generator"])
+            unwrap(msd).load_state_dict(ckpt["msd"])
+            unwrap(mpd).load_state_dict(ckpt["mpd"])
+            optim_g.load_state_dict(ckpt["optim_g"])
+            optim_d.load_state_dict(ckpt["optim_d"])
+            scaler_g.load_state_dict(ckpt["scaler_g"])
+            scaler_d.load_state_dict(ckpt["scaler_d"])
+            step = ckpt["step"]
+            epoch = max(0, ckpt["epoch"] - 1)  # 补偿 while 循环顶部的 epoch += 1
+            best_loss = ckpt["best_loss"]
+
+            if rank == 0:
+                print(f"  ✓ 从检查点恢复: {path}")
+                print(f"    恢复 Step {step}/{args.max_steps} | Epoch {epoch+1} | Best Mel Loss {best_loss:.4f}")
+        else:
+            # 旧格式: 仅 generator state_dict (warm start)
+            unwrap(generator).load_state_dict(ckpt)
+            step, epoch, best_loss = 0, 0, float("inf")
+            if rank == 0:
+                print(f"  ⚠ 检测到旧格式检查点 (仅 generator)，以 warm start 方式恢复: {path}")
+                print(f"    判别器、优化器将重新初始化")
+
+        if is_ddp:
+            dist.barrier()
+
+        return step, epoch, best_loss
+
     # --- 训练 ---
     if rank == 0:
         print(f"开始训练 (max_steps={args.max_steps})...")
@@ -240,9 +297,15 @@ def train(rank, args, world_size=1):
     def unwrap(m):
         return m.module if is_ddp else m
 
-    step = 0
-    epoch = 0
-    best_loss = float("inf")
+    if args.resume is not None:
+        if args.fast:
+            if rank == 0:
+                print("  ⚠ --fast 模式下忽略 --resume，从头开始训练")
+            step, epoch, best_loss = 0, 0, float("inf")
+        else:
+            step, epoch, best_loss = load_checkpoint(args.resume)
+    else:
+        step, epoch, best_loss = 0, 0, float("inf")
 
     while step < args.max_steps:
         epoch += 1
@@ -266,27 +329,30 @@ def train(rank, args, world_size=1):
 
             optim_d.zero_grad()
 
-            fake_wav = generator(mel)
+            with torch.amp.autocast('cuda'):
+                fake_wav = generator(mel)
 
-            # MPD
-            mpd_real = mpd(wav)
-            mpd_fake = mpd(fake_wav.detach())
-            loss_mpd = discriminator_loss(
-                [r[1] for r in mpd_real],
-                [f[1] for f in mpd_fake],
-            )
+                # MPD
+                mpd_real = mpd(wav)
+                mpd_fake = mpd(fake_wav.detach())
+                loss_mpd = discriminator_loss(
+                    [r[1] for r in mpd_real],
+                    [f[1] for f in mpd_fake],
+                )
 
-            # MSD
-            msd_real = msd(wav)
-            msd_fake = msd(fake_wav.detach())
-            loss_msd = discriminator_loss(
-                [r[1] for r in msd_real],
-                [f[1] for f in msd_fake],
-            )
+                # MSD
+                msd_real = msd(wav)
+                msd_fake = msd(fake_wav.detach())
+                loss_msd = discriminator_loss(
+                    [r[1] for r in msd_real],
+                    [f[1] for f in msd_fake],
+                )
 
-            loss_d = loss_mpd + loss_msd
-            loss_d.backward()
-            optim_d.step()
+                loss_d = loss_mpd + loss_msd
+
+            scaler_d.scale(loss_d).backward()
+            scaler_d.step(optim_d)
+            scaler_d.update()
 
             # ========== 训练生成器 ==========
             for p in msd.parameters():
@@ -296,31 +362,34 @@ def train(rank, args, world_size=1):
 
             optim_g.zero_grad()
 
-            fake_wav = generator(mel)
+            with torch.amp.autocast('cuda'):
+                fake_wav = generator(mel)
 
-            # GAN loss
-            mpd_fake = mpd(fake_wav)
-            msd_fake = msd(fake_wav)
-            loss_gan = generator_loss([f[1] for f in mpd_fake]) + \
-                       generator_loss([f[1] for f in msd_fake])
+                # GAN loss
+                mpd_fake = mpd(fake_wav)
+                msd_fake = msd(fake_wav)
+                loss_gan = generator_loss([f[1] for f in mpd_fake]) + \
+                           generator_loss([f[1] for f in msd_fake])
 
-            # Mel loss
-            loss_mel = mel_loss(mel, fake_wav, mel_fn)
+                # Mel loss
+                loss_mel = mel_loss(mel, fake_wav, mel_fn)
 
-            # Feature matching loss
-            mpd_real = mpd(wav)
-            msd_real = msd(wav)
-            loss_fm = feature_matching_loss(
-                [f[0] for f in mpd_real],
-                [f[0] for f in mpd_fake],
-            ) + feature_matching_loss(
-                [f[0] for f in msd_real],
-                [f[0] for f in msd_fake],
-            )
+                # Feature matching loss
+                mpd_real = mpd(wav)
+                msd_real = msd(wav)
+                loss_fm = feature_matching_loss(
+                    [f[0] for f in mpd_real],
+                    [f[0] for f in mpd_fake],
+                ) + feature_matching_loss(
+                    [f[0] for f in msd_real],
+                    [f[0] for f in msd_fake],
+                )
 
-            loss_g = loss_gan + args.lambda_mel * loss_mel + args.lambda_fm * loss_fm
-            loss_g.backward()
-            optim_g.step()
+                loss_g = loss_gan + args.lambda_mel * loss_mel + args.lambda_fm * loss_fm
+
+            scaler_g.scale(loss_g).backward()
+            scaler_g.step(optim_g)
+            scaler_g.update()
 
             # --- 日志 ---
             if rank == 0 and step % args.log_interval == 0:
@@ -335,18 +404,53 @@ def train(rank, args, world_size=1):
 
             # --- 保存检查点 ---
             if rank == 0 and step % args.save_interval == 0 and step > 0:
-                ckpt_path = output_dir / f"g_{step:06d}.pt"
-                torch.save(unwrap(generator).state_dict(), ckpt_path)
+                ckpt = {
+                    "version": 1,
+                    "generator": unwrap(generator).state_dict(),
+                    "msd": unwrap(msd).state_dict(),
+                    "mpd": unwrap(mpd).state_dict(),
+                    "optim_g": optim_g.state_dict(),
+                    "optim_d": optim_d.state_dict(),
+                    "scaler_g": scaler_g.state_dict(),
+                    "scaler_d": scaler_d.state_dict(),
+                    "step": step,
+                    "epoch": epoch,
+                    "best_loss": best_loss,
+                }
+
+                # 完整检查点 (可恢复)
+                torch.save(ckpt, output_dir / f"checkpoint_{step:06d}.pt")
+
+                # Generator-only 检查点 (推理用)
+                torch.save(unwrap(generator).state_dict(), output_dir / f"g_{step:06d}.pt")
+
                 if loss_mel.item() < best_loss:
                     best_loss = loss_mel.item()
-                    best_path = output_dir / "g_best.pt"
-                    torch.save(unwrap(generator).state_dict(), best_path)
-                    print(f"  ✓ 最佳模型已保存: {best_path}")
+                    # 完整检查点最佳版
+                    ckpt["best_loss"] = best_loss
+                    torch.save(ckpt, output_dir / "checkpoint_best.pt")
+                    # Generator-only 最佳版 (推理兼容)
+                    torch.save(unwrap(generator).state_dict(), output_dir / "g_best.pt")
+                    print(f"  ✓ 最佳模型已保存: g_best.pt / checkpoint_best.pt")
 
             step += 1
 
     # 最终保存
     if rank == 0:
+        final_ckpt = {
+            "version": 1,
+            "generator": unwrap(generator).state_dict(),
+            "msd": unwrap(msd).state_dict(),
+            "mpd": unwrap(mpd).state_dict(),
+            "optim_g": optim_g.state_dict(),
+            "optim_d": optim_d.state_dict(),
+            "scaler_g": scaler_g.state_dict(),
+            "scaler_d": scaler_d.state_dict(),
+            "step": step,
+            "epoch": epoch,
+            "best_loss": best_loss,
+        }
+        torch.save(final_ckpt, output_dir / "checkpoint_final.pt")
         torch.save(unwrap(generator).state_dict(), output_dir / "g_final.pt")
         print(f"\n训练完成! 模型已保存到 {output_dir}")
         print(f"  最终 Mel Loss: {loss_mel.item():.4f}")
@@ -365,6 +469,11 @@ def train(rank, args, world_size=1):
 # ============================================================
 
 def main():
+    # A100 优化: TF32 + cudnn benchmark
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+
     parser = argparse.ArgumentParser(description="HiFi-GAN 训练")
     parser.add_argument("--data-root", type=str, default=None,
                         help="音频文件或目录 (默认: 自动下载 LJSpeech)")
@@ -375,8 +484,8 @@ def main():
     parser.add_argument("--n-fft", type=int, default=1024, help="FFT 点数")
     parser.add_argument("--n-mels", type=int, default=80, help="Mel 通道数")
     parser.add_argument("--hop-length", type=int, default=256, help="帧移")
-    parser.add_argument("--segment-len", type=int, default=8192, help="训练音频片段长度")
-    parser.add_argument("--batch-size", type=int, default=8, help="批次大小")
+    parser.add_argument("--segment-len", type=int, default=16384, help="训练音频片段长度")
+    parser.add_argument("--batch-size", type=int, default=32, help="每张卡的批次大小")
     parser.add_argument("--lr", type=float, default=2e-4, help="学习率")
     parser.add_argument("--max-steps", type=int, default=500000, help="最大训练步数")
     parser.add_argument("--lambda-mel", type=float, default=45.0, help="Mel loss 权重")
@@ -384,27 +493,29 @@ def main():
     parser.add_argument("--log-interval", type=int, default=100, help="日志间隔")
     parser.add_argument("--save-interval", type=int, default=10000, help="保存间隔")
     parser.add_argument("--fast", action="store_true", help="快速验证模式 (100 步)")
-    parser.add_argument("--multi-gpu", action="store_true", help="使用所有可用 GPU (DDP)")
+    parser.add_argument("--single-gpu", action="store_true", help="强制单卡模式 (默认使用全部 GPU)")
+    parser.add_argument("--resume", type=str, default=None,
+                        help="从检查点恢复训练。接受: checkpoint_best | checkpoint_latest | 显式路径")
     args = parser.parse_args()
 
     if args.fast:
         args.max_steps = 100
         args.log_interval = 10
-        args.batch_size = 4
-        args.segment_len = 4096
+        args.batch_size = 8
+        args.segment_len = 16384
         print("[快速验证模式]")
 
-    if args.multi_gpu:
-        world_size = torch.cuda.device_count()
-        if world_size < 2:
-            print("只有 1 张卡可用，使用单卡模式")
-            train(0, args)
-        else:
-            os.environ.setdefault("MASTER_ADDR", "localhost")
-            os.environ.setdefault("MASTER_PORT", "29500")
-            mp.spawn(train, args=(args, world_size), nprocs=world_size, join=True)
-    else:
+    world_size = torch.cuda.device_count()
+    if args.single_gpu or world_size < 2:
+        if world_size < 2 and not args.single_gpu:
+            print(f"检测到 {world_size} 张卡，使用单卡模式")
         train(0, args)
+    else:
+        print(f"检测到 {world_size} 张 GPU，使用 DDP 多卡训练")
+        print(f"  有效总 batch_size = {args.batch_size} × {world_size} = {args.batch_size * world_size}")
+        os.environ.setdefault("MASTER_ADDR", "localhost")
+        os.environ.setdefault("MASTER_PORT", "29500")
+        mp.spawn(train, args=(args, world_size), nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":

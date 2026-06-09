@@ -10,7 +10,8 @@ Generator + Multi-Scale Discriminator (MSD) + Multi-Period Discriminator (MPD)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils import weight_norm, remove_weight_norm
+from torch.nn.utils.parametrizations import weight_norm
+from torch.nn.utils.parametrize import remove_parametrizations
 
 
 # ============================================================
@@ -61,22 +62,22 @@ class ResBlock(nn.Module):
 
     def remove_weight_norm(self):
         for conv in self.convs:
-            remove_weight_norm(conv)
+            remove_parametrizations(conv, 'weight')
 
 
 class MRF(nn.Module):
     """Multi-Receptive Field Fusion。
 
-    3 路并行的 ResBlock (kernel=3,5,7)，每路 2 层空洞卷积，
+    3 路并行的 ResBlock (kernel=3,7,11)，每路 3 层空洞卷积，
     输出求和融合不同感受野的信息。
     """
 
     def __init__(self, channels: int):
         super().__init__()
         self.blocks = nn.ModuleList([
-            ResBlock(channels, kernel_size=3, dilations=[1, 3]),
-            ResBlock(channels, kernel_size=5, dilations=[1, 3]),
-            ResBlock(channels, kernel_size=7, dilations=[1, 3]),
+            ResBlock(channels, kernel_size=3, dilations=[1, 3, 5]),
+            ResBlock(channels, kernel_size=7, dilations=[1, 3, 5]),
+            ResBlock(channels, kernel_size=11, dilations=[1, 3, 5]),
         ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -168,10 +169,10 @@ class HiFiGANGenerator(nn.Module):
         return x
 
     def remove_weight_norm(self):
-        remove_weight_norm(self.conv_pre)
-        remove_weight_norm(self.conv_post)
+        remove_parametrizations(self.conv_pre, 'weight')
+        remove_parametrizations(self.conv_post, 'weight')
         for up in self.ups:
-            remove_weight_norm(up)
+            remove_parametrizations(up, 'weight')
         for mrf in self.mrfs:
             mrf.remove_weight_norm()
 

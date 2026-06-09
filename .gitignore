@@ -31,3 +31,7 @@ settings.local.json
 # OS
 Thumbs.db
 .DS_Store
+
+ppt/
+*.log
+*.wav
