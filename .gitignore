@@ -16,6 +16,10 @@ output/
 .env
 .venv/
 venv/
+conda_env/
+
+# 数据
+data/
 
 # 本地配置（含敏感路径）
 settings.local.json
@@ -27,3 +31,7 @@ settings.local.json
 # OS
 Thumbs.db
 .DS_Store
+
+ppt/
+*.log
+*.wav
