@@ -200,7 +200,7 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
     fontSize: 30, fontFace: "Georgia", color: C.amber, bold: false,
     margin: 0,
   });
-  s.addText("30 分钟技术分享", {
+  s.addText("技术分享", {
     x: 0.6, y: 3.4, w: 8.8, h: 0.5,
     fontSize: 16, fontFace: "Calibri", color: C.muted,
     margin: 0,
@@ -280,6 +280,7 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
 })();
 
 // ================================================================
+
 // SLIDE 4: 波形 vs 频谱
 // ================================================================
 (() => {
@@ -288,41 +289,59 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
   slideTitle(s, "波形 vs 频谱", "阶段1：同一个声音的两种视角");
 
   // Waveform card
-  contentCard(s, 0.5, 1.6, 4.3, 3.2);
-  accentBar(s, 0.5, 1.6, 0.06, 3.2);
+  contentCard(s, 0.5, 1.6, 4.3, 3.5);
+  accentBar(s, 0.5, 1.6, 0.06, 3.5);
   s.addText("波形 Waveform", {
-    x: 0.8, y: 1.75, w: 3.8, h: 0.45,
-    fontSize: 18, fontFace: "Georgia", color: C.white, bold: true, margin: 0,
+    x: 0.8, y: 1.75, w: 3.8, h: 0.35,
+    fontSize: 16, fontFace: "Georgia", color: C.white, bold: true, margin: 0,
   });
-  bulletText(s, 0.8, 2.3, 3.8, 2.3, [
+  bulletText(s, 0.8, 2.15, 3.8, 1.1, [
     "横轴 = 时间，纵轴 = 振幅",
-    "文件里每个浮点数 = 声波振到什么位置",
-    "正数 → 振膜向外推，负数 → 向里拉",
-    "每秒 16000 个点 = 16kHz 采样率",
+    "每个浮点数 = 声波振到什么位置",
+    "每秒 16000 个点连续播放",
     { text: "看不出「男声还是女声，是 /a/ 还是 /i/」", options: { color: C.red, italic: true } },
-  ]);
+  ], { fontSize: 12 });
+
+  // Placeholder for waveform image
+  s.addShape(pres.shapes.RECTANGLE, {
+    x: 0.8, y: 3.4, w: 3.7, h: 1.5,
+    fill: { color: "F0F2F4" },
+  });
+  s.addText("(waveform)", {
+    x: 0.8, y: 3.4, w: 3.7, h: 1.5,
+    fontSize: 11, fontFace: "Calibri", color: C.muted, align: "center", valign: "middle", margin: 0,
+  });
 
   // Arrow
   s.addText("→", {
-    x: 4.5, y: 2.8, w: 0.8, h: 0.5,
+    x: 4.5, y: 3.1, w: 0.8, h: 0.5,
     fontSize: 32, fontFace: "Calibri", color: C.amber, bold: true,
     align: "center", valign: "middle", margin: 0,
   });
 
   // Spectrogram card
-  contentCard(s, 5.2, 1.6, 4.3, 3.2);
-  accentBar(s, 5.2, 1.6, 0.06, 3.2);
+  contentCard(s, 5.2, 1.6, 4.3, 3.5);
+  accentBar(s, 5.2, 1.6, 0.06, 3.5);
   s.addText("频谱 Spectrogram", {
-    x: 5.5, y: 1.75, w: 3.8, h: 0.45,
-    fontSize: 18, fontFace: "Georgia", color: C.white, bold: true, margin: 0,
+    x: 5.5, y: 1.75, w: 3.8, h: 0.35,
+    fontSize: 16, fontFace: "Georgia", color: C.white, bold: true, margin: 0,
   });
-  bulletText(s, 5.5, 2.3, 3.8, 2.3, [
+  bulletText(s, 5.5, 2.15, 3.8, 1.1, [
     "横轴 = 时间，纵轴 = 频率，颜色 = 能量",
     "能量集中在低频 → 男声",
     "高频横杠 → 摩擦音 /s/",
-    "一眼看出音色、音高、内容",
-    { text: "✓ 语音的本质 = 不同频率的能量随时间变化", options: { color: C.green } },
-  ]);
+    { text: "语音的本质 = 频率能量随时间变化", options: { color: C.green } },
+  ], { fontSize: 12 });
+
+  // Placeholder for spectrogram image
+  s.addShape(pres.shapes.RECTANGLE, {
+    x: 5.5, y: 3.4, w: 3.7, h: 1.5,
+    fill: { color: "F0F2F4" },
+  });
+  s.addText("(spectrogram)", {
+    x: 5.5, y: 3.4, w: 3.7, h: 1.5,
+    fontSize: 11, fontFace: "Calibri", color: C.muted, align: "center", valign: "middle", margin: 0,
+  });
 })();
 
 // ================================================================
@@ -775,6 +794,12 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
   s.background = { color: C.bg };
   slideTitle(s, "VITS 架构概览", "VAE 框架 · 端到端 TTS");
 
+  // Complete pipeline summary
+  s.addText("完整链路：大家好 → 音素 → TextEncoder → z → HiFi-GAN → 波形", {
+    x: 0.5, y: 1.15, w: 9, h: 0.2,
+    fontSize: 11, fontFace: "Calibri", color: C.muted, italic: true, margin: 0,
+  });
+
   const boxH = 0.28;
   const arrowH = 0.06;
   const gapH = 0.06;
@@ -1018,18 +1043,18 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
 
   // Training vs inference
   s.addText("精妙之处：SDP 学习 MAS 自动发现的时长 — 互相配合但互不依赖", {
-    x: 0.5, y: 4.4, w: 9, h: 0.3,
+    x: 0.5, y: 4.3, w: 9, h: 0.25,
     fontSize: 13, fontFace: "Calibri", color: C.amber, italic: true, margin: 0,
   });
 
   const trainingInference = [
-    ["", "训练", "推理"],
-    ["时长来源", "MAS（需真实音频）", "SDP 采样"],
-    ["SDP 在干嘛", "学习 — 最大化 MAS 时长的似然", "干活 — 从学到的分布采样"],
-    ["Loss", "Negative Log-Likelihood", "无"],
+    ["训练", "推理"],
+    ["MAS（需真实音频）", "SDP 采样"],
+    ["学习 — 最大化 MAS 时长的似然", "干活 — 从学到的分布采样"],
+    ["Negative Log-Likelihood", "无"],
   ];
 
-  const colW2 = [1.8, 3.6, 3.6];
+  const colW2 = [4.5, 4.5];
   const headerRow2 = trainingInference[0].map(h => ({
     text: h, options: { fill: { color: C.bgLight }, color: C.white, bold: true, fontSize: 11, fontFace: "Calibri", align: "center", valign: "middle" },
   }));
@@ -1041,9 +1066,9 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
   );
 
   s.addTable([headerRow2, ...dataRows2], {
-    x: 1.5, y: 4.6, w: 7.0, colW: colW2,
+    x: 0.5, y: 4.6, w: 9.0, colW: colW2,
     border: { pt: 1, color: C.bgLight },
-    rowH: [0.25, 0.2, 0.2, 0.2],
+    rowH: [0.2, 0.16, 0.16, 0.16],
   });
 })();
 
@@ -1063,7 +1088,7 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
   cards.forEach((card, i) => {
     const x = 0.5 + i * 4.7;
     const fill = card.isBest ? C.bgLight : C.bgCard;
-    contentCard(s, x, 1.6, 4.4, 1.2, { fill });
+    contentCard(s, x, 1.6, 4.4, 1.0, { fill });
     if (card.isBest) {
       s.addShape(pres.shapes.RECTANGLE, { x, y: 1.6, w: 4.4, h: 0.04, fill: { color: C.amber } });
     }
@@ -1076,12 +1101,12 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
 
   // Affine Coupling Layer
   s.addText("Affine Coupling Layer", {
-    x: 0.5, y: 3.05, w: 9, h: 0.35,
+    x: 0.5, y: 2.8, w: 9, h: 0.35,
     fontSize: 16, fontFace: "Georgia", color: C.white, bold: true, margin: 0,
   });
 
   // Visual of coupling
-  contentCard(s, 0.5, 3.45, 9.0, 1.8);
+  contentCard(s, 0.5, 3.2, 9.0, 1.55);
   s.addText([
     { text: "输入 z  →  切半  →  ", options: { color: C.ice, fontSize: 12, fontFace: "Consolas" } },
     { text: "z₁", options: { color: C.amber, fontSize: 12, fontFace: "Consolas", bold: true } },
@@ -1092,10 +1117,10 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
     { text: "               →  ", options: { color: C.ice, fontSize: 12, fontFace: "Consolas" } },
     { text: "z₂' = z₂ × exp(scale) + shift\n", options: { color: C.amber, fontSize: 12, fontFace: "Consolas", breakLine: true } },
     { text: "拼接  z₁ + z₂'  →  输出", options: { color: C.ice, fontSize: 12, fontFace: "Consolas" } },
-  ], { x: 0.8, y: 3.5, w: 8.4, h: 1.3, valign: "middle", margin: 8 });
+  ], { x: 0.8, y: 3.25, w: 8.4, h: 1.15, valign: "middle", margin: 8 });
 
   s.addText("关键优势：可逆 — 反向只需算术逆，NN 不需要可逆", {
-    x: 0.5, y: 4.85, w: 9, h: 0.25,
+    x: 0.5, y: 4.8, w: 9, h: 0.25,
     fontSize: 13, fontFace: "Calibri", color: C.amber, italic: true, align: "center", margin: 0,
   });
 })();
@@ -1164,7 +1189,6 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
     x: 2.8, y: 1.6, w: 4.4, h: 0.6,
     fontSize: 18, fontFace: "Georgia", color: C.white, bold: true, align: "center", margin: 0,
   });
-  flowBox(s, 2.8, 1.55, 4.4, 0.65, "", { fill: C.bgLight });
 
   // Split lines
   s.addText("┌", { x: 3.2, y: 2.15, w: 1.2, h: 0.5, fontSize: 20, fontFace: "Consolas", color: C.amber, align: "center", margin: 0 });
@@ -1247,19 +1271,9 @@ pres.title = "从 Mel 频谱到 VITS——TTS 学习之路";
     rowH: [0.5, 0.55, 0.55, 0.55],
   });
 
-  // Complete pipeline
-  s.addText("完整链路", {
-    x: 0.5, y: 3.65, w: 9, h: 0.35,
-    fontSize: 16, fontFace: "Georgia", color: C.white, bold: true, margin: 0, align: "center",
-  });
-
-  s.addText("「大家好」 → 音素 /d/a/j/i/a/h/a/o/ → TextEncoder → z → HiFi-GAN → 波形 ✓", {
-    x: 0.5, y: 4.1, w: 9, h: 0.45,
-    fontSize: 14, fontFace: "Consolas", color: C.amber, align: "center", margin: 0,
-  });
 
   s.addText("VITS 用隐变量 z 替代 Mel — TTS 从「手工设计」走向「端到端学习」的分水岭", {
-    x: 0.5, y: 4.5, w: 9, h: 0.35,
+    x: 0.5, y: 3.8, w: 9, h: 0.35,
     fontSize: 14, fontFace: "Calibri", color: C.white, align: "center", italic: true, margin: 0,
   });
 })();

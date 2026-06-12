@@ -1,0 +1,1 @@
+- [stage1-talk-framing](stage1-talk-framing.md) — 阶段1演讲"是什么/为什么/怎么做" + 小白视角叙事线
